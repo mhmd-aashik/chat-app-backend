@@ -2,6 +2,7 @@ import {
   ConnectedSocket,
   MessageBody,
   OnGatewayConnection,
+  OnGatewayDisconnect,
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
@@ -20,9 +21,11 @@ type AuthenticatedSocket = Socket & {
     origin: '*',
   },
 })
-export class ChatGateway implements OnGatewayConnection {
+export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
+
+  private readonly onlineUsers = new Map<number, Set<string>>();
 
   constructor(
     private readonly messagesService: MessagesService,
@@ -45,10 +48,52 @@ export class ChatGateway implements OnGatewayConnection {
 
       client.userId = payload.sub;
 
-      console.log(`Socket connected: user ${client.userId}`);
+      const sockets = this.onlineUsers.get(client.userId) ?? new Set<string>();
+
+      sockets.add(client.id);
+
+      this.onlineUsers.set(client.userId, sockets);
+
+      this.server.emit('userOnline', {
+        userId: client.userId,
+      });
+
+      console.log(`User ${client.userId} connected`);
     } catch {
       client.disconnect();
     }
+  }
+
+  handleDisconnect(client: AuthenticatedSocket) {
+    if (!client.userId) {
+      return;
+    }
+
+    const sockets = this.onlineUsers.get(client.userId);
+
+    if (!sockets) {
+      return;
+    }
+
+    sockets.delete(client.id);
+
+    if (sockets.size === 0) {
+      this.onlineUsers.delete(client.userId);
+
+      this.server.emit('userOffline', {
+        userId: client.userId,
+      });
+    }
+
+    console.log(`User ${client.userId} disconnected`);
+  }
+
+  @SubscribeMessage('getOnlineUsers')
+  getOnlineUsers() {
+    return {
+      event: 'onlineUsers',
+      data: Array.from(this.onlineUsers.keys()),
+    };
   }
 
   @SubscribeMessage('joinConversation')
@@ -69,9 +114,7 @@ export class ChatGateway implements OnGatewayConnection {
       client.userId,
     );
 
-    const room = `conversation:${data.conversationId}`;
-
-    await client.join(room);
+    await client.join(`conversation:${data.conversationId}`);
 
     return {
       event: 'joinedConversation',
