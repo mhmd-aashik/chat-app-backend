@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, lt } from 'drizzle-orm';
 
 import { DbService } from '../db/db.service.js';
 import {
@@ -62,14 +62,41 @@ export class MessagesService {
     return result[0];
   }
 
-  async getMessages(conversationId: number, currentUserId: number) {
+  async getMessages(
+    conversationId: number,
+    currentUserId: number,
+    cursor?: number,
+    limit = 20,
+  ) {
     await this.ensureUserInConversation(conversationId, currentUserId);
 
-    return this.dbService.db
+    const safeLimit = Math.min(limit, 50);
+
+    const conditions = [eq(messages.conversationId, conversationId)];
+
+    if (cursor) {
+      conditions.push(lt(messages.id, cursor));
+    }
+
+    const result = await this.dbService.db
       .select()
       .from(messages)
-      .where(eq(messages.conversationId, conversationId))
-      .orderBy(asc(messages.createdAt));
+      .where(and(...conditions))
+      .orderBy(desc(messages.id))
+      .limit(safeLimit + 1);
+
+    const hasMore = result.length > safeLimit;
+
+    const page = hasMore ? result.slice(0, safeLimit) : result;
+
+    const nextCursor =
+      hasMore && page.length > 0 ? page[page.length - 1].id : null;
+
+    return {
+      data: page.reverse(),
+      nextCursor,
+      hasMore,
+    };
   }
 
   async markDelivered(messageId: number, currentUserId: number) {
