@@ -153,4 +153,52 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       data: message,
     };
   }
+
+  @SubscribeMessage('typingStart')
+  async handleTypingStart(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody()
+    data: {
+      conversationId: number;
+    },
+  ) {
+    if (!client.userId) {
+      return;
+    }
+
+    await this.messagesService.ensureUserInConversation(
+      data.conversationId,
+      client.userId,
+    );
+
+    client.to(`conversation:${data.conversationId}`).emit('userTyping', {
+      conversationId: data.conversationId,
+      userId: client.userId,
+      isTyping: true,
+    });
+  }
+
+  @SubscribeMessage('typingStop')
+  async handleTypingStop(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody()
+    data: {
+      conversationId: number;
+    },
+  ) {
+    if (!client.userId) {
+      return;
+    }
+
+    await this.messagesService.ensureUserInConversation(
+      data.conversationId,
+      client.userId,
+    );
+
+    client.to(`conversation:${data.conversationId}`).emit('userTyping', {
+      conversationId: data.conversationId,
+      userId: client.userId,
+      isTyping: false,
+    });
+  }
 }
