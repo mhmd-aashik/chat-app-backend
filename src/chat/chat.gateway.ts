@@ -1,29 +1,59 @@
 import {
   ConnectedSocket,
   MessageBody,
+  OnGatewayConnection,
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
-
+import { JwtService } from '@nestjs/jwt';
 import { Server, Socket } from 'socket.io';
 
 import { MessagesService } from '../messages/messages.service.js';
+
+type AuthenticatedSocket = Socket & {
+  userId?: number;
+};
 
 @WebSocketGateway({
   cors: {
     origin: '*',
   },
 })
-export class ChatGateway {
+export class ChatGateway implements OnGatewayConnection {
   @WebSocketServer()
   server: Server;
 
-  constructor(private readonly messagesService: MessagesService) {}
+  constructor(
+    private readonly messagesService: MessagesService,
+    private readonly jwtService: JwtService,
+  ) {}
+
+  async handleConnection(client: AuthenticatedSocket) {
+    try {
+      const token = client.handshake.auth?.token;
+
+      if (!token) {
+        client.disconnect();
+        return;
+      }
+
+      const payload = await this.jwtService.verifyAsync<{
+        sub: number;
+        email: string;
+      }>(token);
+
+      client.userId = payload.sub;
+
+      console.log(`Socket connected: user ${client.userId}`);
+    } catch {
+      client.disconnect();
+    }
+  }
 
   @SubscribeMessage('joinConversation')
   handleJoinConversation(
-    @ConnectedSocket() client: Socket,
+    @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody()
     data: {
       conversationId: number;
@@ -43,23 +73,27 @@ export class ChatGateway {
 
   @SubscribeMessage('sendMessage')
   async handleSendMessage(
-    @ConnectedSocket() client: Socket,
+    @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody()
     data: {
       conversationId: number;
-      senderId: number;
       content: string;
     },
   ) {
+    if (!client.userId) {
+      client.disconnect();
+      return;
+    }
+
     const message = await this.messagesService.sendMessage(
       data.conversationId,
-      data.senderId,
+      client.userId,
       data.content,
     );
 
-    const room = `conversation:${data.conversationId}`;
-
-    this.server.to(room).emit('newMessage', message);
+    this.server
+      .to(`conversation:${data.conversationId}`)
+      .emit('newMessage', message);
 
     return {
       event: 'messageSent',
