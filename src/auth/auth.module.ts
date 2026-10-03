@@ -9,6 +9,7 @@ import { JwtAuthGuard } from './jwt-auth.guard.js';
 @Module({
   imports: [
     JwtModule.registerAsync({
+      global: true,
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
@@ -22,5 +23,6 @@ import { JwtAuthGuard } from './jwt-auth.guard.js';
   ],
   providers: [AuthService, JwtAuthGuard],
   controllers: [AuthController],
+  exports: [JwtAuthGuard],
 })
 export class AuthModule {}
