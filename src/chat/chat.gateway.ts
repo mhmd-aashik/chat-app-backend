@@ -52,16 +52,26 @@ export class ChatGateway implements OnGatewayConnection {
   }
 
   @SubscribeMessage('joinConversation')
-  handleJoinConversation(
+  async handleJoinConversation(
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody()
     data: {
       conversationId: number;
     },
   ) {
+    if (!client.userId) {
+      client.disconnect();
+      return;
+    }
+
+    await this.messagesService.ensureUserInConversation(
+      data.conversationId,
+      client.userId,
+    );
+
     const room = `conversation:${data.conversationId}`;
 
-    client.join(room);
+    await client.join(room);
 
     return {
       event: 'joinedConversation',

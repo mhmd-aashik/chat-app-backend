@@ -16,10 +16,7 @@ import {
 export class MessagesService {
   constructor(private readonly dbService: DbService) {}
 
-  private async ensureUserInConversation(
-    conversationId: number,
-    userId: number,
-  ) {
+  async ensureUserInConversation(conversationId: number, userId: number) {
     const conversation = await this.dbService.db
       .select({
         id: conversations.id,
