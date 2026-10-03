@@ -20,5 +20,9 @@ export const messages = pgTable('messages', {
 
   content: text('content').notNull(),
 
+  deliveredAt: timestamp('delivered_at'),
+
+  readAt: timestamp('read_at'),
+
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });

@@ -71,4 +71,71 @@ export class MessagesService {
       .where(eq(messages.conversationId, conversationId))
       .orderBy(asc(messages.createdAt));
   }
+
+  async markDelivered(messageId: number, currentUserId: number) {
+    const message = await this.dbService.db
+      .select()
+      .from(messages)
+      .where(eq(messages.id, messageId))
+      .limit(1);
+
+    if (!message[0]) {
+      throw new NotFoundException('Message not found');
+    }
+
+    await this.ensureUserInConversation(
+      message[0].conversationId,
+      currentUserId,
+    );
+
+    if (message[0].senderId === currentUserId) {
+      throw new ForbiddenException(
+        'You cannot mark your own message as delivered',
+      );
+    }
+
+    const result = await this.dbService.db
+      .update(messages)
+      .set({
+        deliveredAt: new Date(),
+      })
+      .where(eq(messages.id, messageId))
+      .returning();
+
+    return result[0];
+  }
+
+  async markRead(messageId: number, currentUserId: number) {
+    const message = await this.dbService.db
+      .select()
+      .from(messages)
+      .where(eq(messages.id, messageId))
+      .limit(1);
+
+    if (!message[0]) {
+      throw new NotFoundException('Message not found');
+    }
+
+    await this.ensureUserInConversation(
+      message[0].conversationId,
+      currentUserId,
+    );
+
+    if (message[0].senderId === currentUserId) {
+      throw new ForbiddenException('You cannot mark your own message as read');
+    }
+
+    const now = new Date();
+
+    const result = await this.dbService.db
+      .update(messages)
+      .set({
+        deliveredAt: message[0].deliveredAt ?? now,
+        readAt: now,
+      })
+      .where(eq(messages.id, messageId))
+      .returning();
+
+    return result[0];
+  }
 }

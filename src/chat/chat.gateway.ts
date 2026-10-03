@@ -201,4 +201,30 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       isTyping: false,
     });
   }
+
+  @SubscribeMessage('messageRead')
+  async handleMessageRead(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody()
+    data: {
+      messageId: number;
+    },
+  ) {
+    if (!client.userId) {
+      return;
+    }
+
+    const message = await this.messagesService.markRead(
+      data.messageId,
+      client.userId,
+    );
+
+    this.server
+      .to(`conversation:${message.conversationId}`)
+      .emit('messageRead', {
+        messageId: message.id,
+        deliveredAt: message.deliveredAt,
+        readAt: message.readAt,
+      });
+  }
 }
